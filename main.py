@@ -5,6 +5,59 @@ import sqlite3
 import os
 import random
 
+# Backup the DB every 15 minutes
+import shutil
+import schedule
+import time
+from datetime import datetime, date
+import threading
+
+def run_continuously(interval=1):
+	"""Continuously run, while executing pending jobs at each
+	elapsed time interval.
+	@return cease_continuous_run: threading. Event which can
+	be set to cease continuous run. Please note that it is
+	*intended behavior that run_continuously() does not run
+	missed jobs*. For example, if you've registered a job that
+	should run every minute and you set a continuous run
+	interval of one hour then your job won't be run 60 times
+	at each interval but only once.
+	"""
+	cease_continuous_run = threading.Event()
+
+	class ScheduleThread(threading.Thread):
+		@classmethod
+		def run(cls):
+			while not cease_continuous_run.is_set():
+				schedule.run_pending()
+				time.sleep(interval)
+
+	continuous_thread = ScheduleThread()
+	continuous_thread.start()
+	return cease_continuous_run
+
+# Start the background thread
+stop_run_continuously = run_continuously()
+
+def backup_db():
+	if not os.path.isdir(os.getcwd()+"/backup"):
+		os.mkdir(os.getcwd()+"/backup")
+
+	print("Backing up the db.")
+	today = date.today()
+	current_date = today.strftime("%Y_%m_%d")
+	now = datetime.now()
+	current_time = now.strftime("%H_%M")
+	resulting_backup = current_date + "_" + current_time + "_tags.db"
+	shutil.copy2(pwd + "/db/tags.db", pwd + "/backup/" + resulting_backup)
+
+schedule.every().hour.at("00:00").do(backup_db)
+schedule.every().hour.at("15:00").do(backup_db)
+schedule.every().hour.at("30:00").do(backup_db)
+schedule.every().hour.at("45:00").do(backup_db)
+
+# Bot things
+
 bot_token = ""
 
 pwd = os.getcwd()
