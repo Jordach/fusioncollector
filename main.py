@@ -42,7 +42,7 @@ with open("undesired_tags.conf", "r") as ut:
 			undesired_tags.append(undesired_tag)
 
 add_lines = []
-with open("add_lines.conf", "r") as al:
+with open("add_lines.conf", "r", encoding="utf-8") as al:
 	lines = al.readlines()
 	for line in lines:
 		add_lines.append(line.strip())
@@ -215,6 +215,10 @@ class Bot(discord.Client):
 
 		# Ignore noisy bots
 		if message.author.bot:
+			return
+
+		# Prevent the bot from reading any joined public servers
+		if message.guild:
 			return
 
 		if message.content.startswith("!my_tags"):
