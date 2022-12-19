@@ -134,3 +134,4 @@ dmypy.json
 token.conf
 undesired_tags.conf
 add_lines.conf
+downloaded_tags.txt

@@ -57,7 +57,6 @@ schedule.every().hour.at("30:00").do(backup_db)
 schedule.every().hour.at("45:00").do(backup_db)
 
 # Bot things
-
 bot_token = ""
 
 pwd = os.getcwd()
@@ -79,7 +78,7 @@ with open("token.conf", "r") as token:
 			raise Exception("Bot token is missing")
 
 # Undesired tags - ie things you don't want exported in public data
-undesired_tags = []
+undesired_tags = [""]
 
 # Create the file if missing, but do not pause execution on failure
 if not os.path.isfile(pwd + "/undesired_tags.conf"):
@@ -92,7 +91,10 @@ with open("undesired_tags.conf", "r") as ut:
 		undesired_tag = line.strip()
 		# Deduplicate and ensure that the string has content
 		if undesired_tag not in undesired_tags and undesired_tag != "":
-			undesired_tags.append(undesired_tag)
+			if undesired_tag.startswith("#"):
+				continue
+			else:
+				undesired_tags.append(undesired_tag)
 
 add_lines = []
 with open("add_lines.conf", "r", encoding="utf-8") as al:
@@ -143,6 +145,7 @@ async def help(self, message):
 	embed.add_field(name="!tags:", value="Gives you a list of all submitted tags.", inline=False)
 	embed.add_field(name="!my_tags:", value="Gives you a list of your submitted tags.", inline=False)
 	embed.add_field(name="!source_code:", value="Gives you a copy of the currently running source code.", inline=False)
+	embed.add_field(name="!downloaded:", value="Gives you a list of the downloaded or downloading tags.", inline=False)
 
 	await message.channel.send(embed=embed, mention_author=False, reference=message)
 
@@ -256,10 +259,23 @@ async def add(self, message):
 	await message.channel.send(embed=embed, mention_author=False, reference=message)
 	return
 		
+async def downloaded(self, message):
+	if not os.path.isfile(pwd + "/downloaded_tags.txt"):
+		await message.channel.send("It appears this file is missing, or tags haven't been added yet.")
+	else:
+		await message.channel.send(file=discord.File(pwd+"/downloaded_tags.txt"))
 
 class Bot(discord.Client):
 	async def on_ready(self):
 		await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="for e621 tags."))
+
+	async def on_member_join(self, member):
+		try:
+			message = "Hi there " + member.name + ", I'm the bot that handles and organises tagging for the Fluffusion model. You can get started with me by running:```\n!help```"
+			await member.send(message)
+		except Exception as e:
+			print(e)
+			print("on join failed.")
 
 	async def on_message(self, message):
 		# The bot should never respond to itself, ever
@@ -284,6 +300,8 @@ class Bot(discord.Client):
 			await sauce(self, message)
 		elif message.content.startswith("!help"):
 			await help(self, message)
+		elif message.content.startswith("!downloaded"):
+			await downloaded(self, message)
 
-client = Bot(intents=discord.Intents(dm_messages=True, dm_reactions=True, message_content=True))
+client = Bot(intents=discord.Intents(dm_messages=True, dm_reactions=True, message_content=True, members=True))
 client.run(bot_token)
