@@ -251,12 +251,18 @@ async def add(self, message):
 			print(ln)
 			pass
 
-	embed = discord.Embed(title="Success:")
-	embed.color = discord.Color.blurple()
-	set_author(self, message, embed)
-	embed.add_field(name="Tags:", value=raw_tags)
-	embed.set_footer(text=random.choice(add_lines))
-	await message.channel.send(embed=embed, mention_author=False, reference=message)
+	con.close()
+
+	try:
+		embed = discord.Embed(title="Success:")
+		embed.color = discord.Color.blurple()
+		set_author(self, message, embed)
+		embed.add_field(name="Tags:", value=raw_tags)
+		embed.set_footer(text=random.choice(add_lines))
+		await message.channel.send(embed=embed, mention_author=False, reference=message)
+	except:
+		await message.channel.send("Alright, tags were accepted, but the message was too long OwO and made Discord bulge. > w <", mention_author=False, reference=message)
+
 	return
 		
 async def downloaded(self, message):
