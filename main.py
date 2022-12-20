@@ -271,6 +271,52 @@ async def downloaded(self, message):
 	else:
 		await message.channel.send(file=discord.File(pwd+"/downloaded_tags.txt"))
 
+async def remaining(self, message):
+	con, cur = load_db()
+
+	global_tag_list = []
+	global_tag_dict = {}
+	downloaded_tags = []
+	if os.path.isfile(pwd + "/downloaded_tags.txt"):
+		with open(pwd + "/downloaded_tags.txt", "r") as file:
+			lines = file.readlines()
+			for raw_tag in lines:
+				tag = raw_tag.strip()
+				if tag not in downloaded_tags:
+					downloaded_tags.append(tag)
+
+	tag_query = "SELECT * FROM tags ORDER BY tag ASC"
+	for tag in cur.execute(tag_query):
+		# Do not list undesired tags and do not list downloaded tags
+		if tag[0] not in undesired_tags and tag[0] not in downloaded_tags:
+			global_tag_list.append(tag[0])
+			global_tag_dict[tag[0]] = 0
+
+	id_query = "SELECT * FROM known_id ORDER BY id ASC"
+	discord_ids = []
+	for id in cur.execute(id_query):
+		discord_ids.append(id[0])
+
+	for id in discord_ids:
+		personal_tags = []
+		personal_tag_query = "SELECT * FROM `" + id + "_tags` ORDER BY tag ASC"
+		for tag in cur.execute(personal_tag_query):
+			if tag[0] in global_tag_list:
+				global_tag_dict[tag[0]] += 1
+
+	con.close()
+
+	# Generate the csv:
+	csv_data = "tag_name,votes\n"
+	for tag in global_tag_list:
+		csv_data += tag + "," + str(global_tag_dict[tag]) + "\n"
+
+	csv_path = pwd + "/tmp/tags_remain_" + message.author.display_name + ".csv"
+	with open(csv_path, "w") as file:
+		file.write(csv_data)
+
+	await message.channel.send(file=discord.File(csv_path), mention_author=False, reference=message)
+
 class Bot(discord.Client):
 	async def on_ready(self):
 		await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="for e621 tags."))
@@ -308,6 +354,8 @@ class Bot(discord.Client):
 			await help(self, message)
 		elif message.content.startswith("!downloaded"):
 			await downloaded(self, message)
+		elif message.content.startswith("!remaining"):
+			await remaining(self, message)
 
 client = Bot(intents=discord.Intents(dm_messages=True, dm_reactions=True, message_content=True, members=True))
 client.run(bot_token)
