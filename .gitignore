@@ -135,3 +135,7 @@ token.conf
 undesired_tags.conf
 add_lines.conf
 downloaded_tags.txt
+downloader.conf
+downloader_status.conf
+tag_meta_whitelist.conf
+tag_species_blacklist.conf

@@ -4,6 +4,7 @@ import discord
 import sqlite3
 import os
 import random
+from operator import itemgetter
 
 # Backup the DB every 15 minutes
 import shutil
@@ -38,23 +39,6 @@ def run_continuously(interval=1):
 
 # Start the background thread
 stop_run_continuously = run_continuously()
-
-def backup_db():
-	if not os.path.isdir(os.getcwd()+"/backup"):
-		os.mkdir(os.getcwd()+"/backup")
-
-	print("Backing up the db.")
-	today = date.today()
-	current_date = today.strftime("%Y_%m_%d")
-	now = datetime.now()
-	current_time = now.strftime("%H_%M")
-	resulting_backup = current_date + "_" + current_time + "_tags.db"
-	shutil.copy2(pwd + "/db/tags.db", pwd + "/backup/" + resulting_backup)
-
-schedule.every().hour.at("00:00").do(backup_db)
-schedule.every().hour.at("15:00").do(backup_db)
-schedule.every().hour.at("30:00").do(backup_db)
-schedule.every().hour.at("45:00").do(backup_db)
 
 # Bot things
 bot_token = ""
@@ -113,6 +97,74 @@ def load_db():
 
 	return __con, __cur
 
+# Automate DB backups
+def backup_db():
+	if not os.path.isdir(os.getcwd()+"/backup"):
+		os.mkdir(os.getcwd()+"/backup")
+
+	print("Backing up the db.")
+	today = date.today()
+	current_date = today.strftime("%Y_%m_%d")
+	now = datetime.now()
+	current_time = now.strftime("%H_%M")
+	resulting_backup = current_date + "_" + current_time + "_tags.db"
+	shutil.copy2(pwd + "/db/tags.db", pwd + "/backup/" + resulting_backup)
+
+	con, cur = load_db()
+
+	global_tag_list = []
+	global_tag_dict = {}
+	downloaded_tags = []
+	if os.path.isfile(pwd + "/downloaded_tags.txt"):
+		with open(pwd + "/downloaded_tags.txt", "r") as file:
+			lines = file.readlines()
+			for raw_tag in lines:
+				tag = raw_tag.strip()
+				if tag not in downloaded_tags:
+					downloaded_tags.append(tag)
+
+	tag_query = "SELECT * FROM tags ORDER BY tag ASC"
+	for tag in cur.execute(tag_query):
+		# Do not list undesired tags and do not list downloaded tags
+		if tag[0] not in undesired_tags and tag[0] not in downloaded_tags:
+			global_tag_list.append(tag[0])
+			global_tag_dict[tag[0]] = 0
+
+	id_query = "SELECT * FROM known_id ORDER BY id ASC"
+	discord_ids = []
+	for id in cur.execute(id_query):
+		discord_ids.append(id[0])
+
+	for id in discord_ids:
+		personal_tags = []
+		personal_tag_query = "SELECT * FROM `" + id + "_tags` ORDER BY tag ASC"
+		for tag in cur.execute(personal_tag_query):
+			if tag[0] in global_tag_list:
+				global_tag_dict[tag[0]] += 1
+
+	con.close()
+
+	# Generate the csv:
+	tag_tuples = []
+	csv_data = "tag_name,votes\n"
+	# Sort the list based on number of votes
+	for tag in global_tag_list:
+		tag_tuples.append((tag, global_tag_dict[tag]))
+	
+	tag_tuples = sorted(tag_tuples, key=itemgetter(1), reverse=True)
+	
+	for tag in tag_tuples:
+		csv_data += tag[0] + "," + str(tag[1]) + "\n"
+
+	csv_path = pwd + "/tmp/tags_remaining.csv"
+	with open(csv_path, "w") as file:
+		file.write(csv_data)
+
+schedule.every().hour.at("00:00").do(backup_db)
+schedule.every().hour.at("15:00").do(backup_db)
+schedule.every().hour.at("30:00").do(backup_db)
+schedule.every().hour.at("45:00").do(backup_db)
+
 # Create the tag DB
 _con, _cur = load_db()
 
@@ -146,6 +198,7 @@ async def help(self, message):
 	embed.add_field(name="!my_tags:", value="Gives you a list of your submitted tags.", inline=False)
 	embed.add_field(name="!source_code:", value="Gives you a copy of the currently running source code.", inline=False)
 	embed.add_field(name="!downloaded:", value="Gives you a list of the downloaded or downloading tags.", inline=False)
+	embed.add_field(name="!downloading:", value="Displays the current status of the gallery downloader.", inline=False)
 
 	await message.channel.send(embed=embed, mention_author=False, reference=message)
 
@@ -271,6 +324,13 @@ async def downloaded(self, message):
 	else:
 		await message.channel.send(file=discord.File(pwd+"/downloaded_tags.txt"))
 
+async def downloading(self, message):
+	if os.path.isfile(pwd + "/downloader_status.conf"):
+		with open(pwd + "/downloader_status.conf", "r") as file:
+			lines = file.readlines()
+			for line in lines:
+				await message.channel.send(line.strip())
+
 async def remaining(self, message):
 	con, cur = load_db()
 
@@ -354,6 +414,8 @@ class Bot(discord.Client):
 			await help(self, message)
 		elif message.content.startswith("!downloaded"):
 			await downloaded(self, message)
+		elif message.content.startswith("!downloading"):
+			await downloading(self, message)
 		elif message.content.startswith("!remaining"):
 			await remaining(self, message)
 
