@@ -118,11 +118,12 @@ downloads_this_run = 0
 download_status("Downloading: " + args.query.split(" ")[0])
 try:
 	print("Grabbing posts for: " + args.query+query_negatives)
-	posts = e6.posts.search(tags=args.query+query_negatives, blacklist="", limit=15000, page=1, ignorepage=True)
+	posts = e6.posts.search(tags=args.query+query_negatives, blacklist="", limit=args.unique * 12, page=1, ignorepage=True)
 	if len(posts) < args.unique:
 		raise Exception("Not enough tags in search to fill the unique count. Stopping.")
 
 	print(f"Total number of items in search: {len(posts)} / 15000")
+	iters = 1
 	for post in posts:
 		# Stop downloading posts once we reach the number of unique posts downloaded
 		if downloads_this_run == args.unique:
@@ -136,7 +137,7 @@ try:
 				perform_download = True
 		
 		if perform_download:
-			print(f"Downloading post id: {post['id']}, {downloads_this_run} / {args.unique}")
+			print(f"Downloading post id: {post['id']}, {downloads_this_run} / {args.unique}; {iters} / {len(posts)}")
 			# Should networking failover, don't download and add to DB
 			# Download the image and save it
 			img = requests.get(post["file"]["url"]).content
@@ -192,7 +193,9 @@ try:
 			cur.execute(db_query)
 			time.sleep(0.75)
 		else:
-			print(f"Skipping download for post id: {post['id']}, {downloads_this_run} / {args.unique}")
+			print(f"Skipping download for post id: {post['id']}, {downloads_this_run} / {args.unique}; {iters} / {len(posts)}")
+
+		iters += 1
 
 	initial_tag = args.query.split(" ")[0]
 	if downloads_this_run == args.unique:
@@ -211,6 +214,7 @@ try:
 
 	con.commit()
 	con.close()
+
 
 except Exception as e:
 	con.commit()
