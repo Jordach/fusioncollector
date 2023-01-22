@@ -124,9 +124,10 @@ def backup_db():
 					downloaded_tags.append(tag)
 
 	tag_query = "SELECT * FROM tags ORDER BY tag ASC"
+	mistakes = ["", ")_sssonic", "female_feral_sylveon_meowstic_alolan_ninetales_watersports_skirt_upskirt_feathered_wings_flying_cloudscape", "flower._musk", "stealth_masturbation_absurd_res"]
 	for tag in cur.execute(tag_query):
 		# Do not list undesired tags and do not list downloaded tags
-		if tag[0] not in undesired_tags and tag[0] not in downloaded_tags:
+		if tag[0] not in mistakes and tag[0] not in downloaded_tags:
 			global_tag_list.append(tag[0])
 			global_tag_dict[tag[0]] = 0
 
@@ -224,7 +225,6 @@ async def dump(self, message):
 		discord_ids.append(id[0])
 
 	for id in discord_ids:
-		personal_tags = []
 		personal_tag_query = "SELECT * FROM `" + id + "_tags` ORDER BY tag ASC"
 		for tag in cur.execute(personal_tag_query):
 			if tag[0] in global_tag_list:
@@ -279,11 +279,9 @@ async def add(self, message):
 		pass
 
 	tags = []
-	# Strip duplicates - SQLite will delete any duplicates
+	# Strip duplicates - SQLite will delete a ny duplicates
 	for tag in raw_tags:
 		strip_tag = tag.strip().lower()
-		strip_tag = strip_tag.replace("-", "_")
-		strip_tag = strip_tag.replace(" ", "_")
 		if strip_tag not in tags:
 			tags.append(strip_tag)
 
@@ -338,7 +336,7 @@ async def remaining(self, message):
 	global_tag_dict = {}
 	downloaded_tags = []
 	if os.path.isfile(pwd + "/downloaded_tags.txt"):
-		with open(pwd + "/downloaded_tags.txt", "r") as file:
+		with open(pwd + "/downloaded_tags.txt", "r", encoding="utf-8") as file:
 			lines = file.readlines()
 			for raw_tag in lines:
 				tag = raw_tag.strip()
@@ -387,7 +385,7 @@ class Bot(discord.Client):
 			await member.send(message)
 		except Exception as e:
 			print(e)
-			print("on join failed.")
+			print(f"on join failed for {member.name}.")
 
 	async def on_message(self, message):
 		# The bot should never respond to itself, ever

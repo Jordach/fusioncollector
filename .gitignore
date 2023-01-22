@@ -139,3 +139,4 @@ downloader.conf
 downloader_status.conf
 tag_meta_whitelist.conf
 tag_species_blacklist.conf
+*.csv
