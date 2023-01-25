@@ -331,7 +331,7 @@ for row in cur.execute(dl_query):
 	avg_times.append(loop_time)
 	true_avg = get_list_avg(avg_times)
 	bar, end = progress_bar(numimg, lres, bar_length=30)
-	console_len = f" {bar} D:{numimg}/{lres} [{get_time(tot_time)}<{get_time((true_avg)*(lres-numimg))}, {loop_time:.2f}s/img]"
+	console_len = f" {bar} D:{numimg}/{lres} [{get_time(tot_time)}<{get_time((true_avg)*(lres-numimg))}, {loop_time:.2f}s/img, {true_avg:.2f}s/avg]"
 	new_len = len(console_len)
 	if old_len > new_len:
 		console_len = console_len + (old_len - new_len) * " "
@@ -357,7 +357,7 @@ for row in cur.execute(dl_query):
 	avg_times.append(loop_time)
 	true_avg = get_list_avg(avg_times)
 	bar, end = progress_bar(numimg, lres, bar_length=30)
-	console_len = f" {bar} D:{numimg}/{lres} [{get_time(tot_time)}<{get_time((true_avg)*(lres-numimg))}, {loop_time:.2f}s/post]"
+	console_len = f" {bar} D:{numimg}/{lres} [{get_time(tot_time)}<{get_time((true_avg)*(lres-numimg))}, {loop_time:.2f}s/post, {true_avg:.2f}s/avg]"
 	new_len = len(console_len)
 	if old_len > new_len:
 		console_len = console_len + (old_len - new_len) * " "
