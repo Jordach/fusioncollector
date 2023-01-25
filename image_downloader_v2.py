@@ -200,21 +200,17 @@ def get_tag_alias(cur, _tag):
 		return row[1]
 
 def filter_tags(cur, _tag):
-	drop_tag = False
 	query = f'SELECT * FROM tags WHERE tag=? LIMIT 1'
 	for row in cur.execute(query, (_tag,)):
 		if int(row[1]) in [-1, 3, 6, 8]:
-			drop_tag = True
-			break
+			return True
 		# Also drop tags if they fail the whitelist/blacklist for meta and species
 		if tag not in meta_whitelist and row[1] == 7:
-			drop_tag = True
-			break
+			return True
 		if tag in species_blacklist and row[1] == 5:
-			drop_tag = True
-			break
+			return True
 		
-	return drop_tag
+	return False
 
 def process_tags_v2(con, cur, tags):
 	# tags tend to be split by spaces when read from the posts table, so let's make a list
