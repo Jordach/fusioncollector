@@ -199,49 +199,38 @@ def get_tag_alias(cur, _tag):
 	for row in cur.execute(query, (_tag,)):
 		return row[1]
 
-def get_tag_implicates(cur, _tag):
-	implicates = []
-
-	# Append any and all tags
-	query = f'SELECT * FROM implicate WHERE tag=?'
-	for row in cur.execute(query, (_tag,)):
-		implicates.append(row[1])
-	return implicates
-
 def filter_tags(cur, _tag):
 	drop_tag = False
-	query = f'SELECT * FROM tags WHERE tag =?'
+	query = f'SELECT * FROM tags WHERE tag=? LIMIT 1'
 	for row in cur.execute(query, (_tag,)):
 		if int(row[1]) in [-1, 3, 6, 8]:
 			drop_tag = True
+			break
 		# Also drop tags if they fail the whitelist/blacklist for meta and species
 		if tag not in meta_whitelist and row[1] == 7:
 			drop_tag = True
+			break
 		if tag in species_blacklist and row[1] == 5:
 			drop_tag = True
+			break
 		
 	return drop_tag
-
 
 def process_tags_v2(con, cur, tags):
 	# tags tend to be split by spaces when read from the posts table, so let's make a list
 	unprocessed_tags = tags.split(" ")
 	processed_tags = []
-	implicates = []
 	tag_string = ""
 	for itag in unprocessed_tags:
 		tag = get_tag_alias(cur, itag)
 		processed_tags.append(tag)
-	
-	implicates = processed_tags
-	for itag in processed_tags:
-		# Append any and all tags
-		query = f'SELECT * FROM implicate WHERE tag=?'
-		for row in cur.execute(query, (itag,)):
-			implicates.append(row[1])
+		query = f'SELECT * FROM implicate_lut WHERE tag=? LIMIT 1'
+		for row in cur.execute(query, (tag,)):
+			processed_tags = processed_tags + row[1].split(" ")
+			break
 		
 	final_tags = []
-	for tag in implicates:
+	for tag in processed_tags:
 		drop_tag = filter_tags(cur, tag)
 		# Do not process any further
 		if not drop_tag:
@@ -258,7 +247,7 @@ def process_tags_v2(con, cur, tags):
 		if tag in all_tags:
 			all_tags[tag][0] += 1
 		elif tag not in all_tags:
-			query = f'SELECT * FROM tags WHERE tag =?'
+			query = f'SELECT * FROM tags WHERE tag=? LIMIT 1'
 			for row in cur.execute(query, (tag,)):
 				# Store the count, category and post processed name
 				all_tags[tag] = [1, row[1], ctag]
@@ -302,8 +291,6 @@ def get_e6_tags(_con, _cur, _id):
 			with open(f"{args.out}/{tag_filename}", "w", encoding="utf-8") as file:
 				file.write(clean_tags)
 
-# test_id = 2470517
-# download_e6_post(econ, ecur, test_id)
 cur.execute("SELECT * FROM posts")
 res = cur.fetchall()
 lres = len(res)
