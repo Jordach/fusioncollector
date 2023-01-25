@@ -90,7 +90,7 @@ def load_e6():
 econ, ecur = load_e6()
 
 bad_post_ids = []
-if os.path.isfile(os.getcwd() + "/db/failed_posts.txt") and args.tags:
+if os.path.isfile(os.getcwd() + "/db/failed_posts.txt"):
 	with open(os.getcwd() + "/db/failed_posts.txt", "r", encoding="utf-8") as file:
 		lines = file.readlines()
 		for line in lines:
@@ -331,7 +331,8 @@ if args.images:
 	print("Image Downloading:")
 	for row in cur.execute(dl_query):
 		loop_start = time.perf_counter()
-		download_e6_post(econ, ecur, row[0])
+		if row[0] not in bad_post_ids:
+			download_e6_post(econ, ecur, row[0])
 		loop_end = time.perf_counter()
 		old_len = len(console_len)
 		tot_time = loop_end - init_time
