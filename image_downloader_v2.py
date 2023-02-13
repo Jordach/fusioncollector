@@ -107,94 +107,6 @@ def get_e6_post(con, cur, id):
 	for row in cur.execute(query):
 		return row
 
-def process_tags(con, cur, tags):
-	# tags tend to be split by spaces when read from the posts table, so let's make a list
-	unprocessed_tags = tags.split(" ")
-
-	# Alias tags first
-	aliased_tags = []
-	for tag in unprocessed_tags:
-		atag = tag
-		# Scan for an existing alias
-		has_alias = True
-		query = f'SELECT COUNT(1) FROM alias WHERE old=?'
-		for row in cur.execute(query, (atag,)):
-			if not row[0]:
-				has_alias = False
-				break
-
-		# If there is an alias, use that
-		if has_alias:
-			query = f'SELECT * FROM alias WHERE old=?'
-			for row in cur.execute(query, (atag,)):
-				atag = row[1]
-				break
-		
-		# Add to the list
-		aliased_tags.append(atag)
-
-	# Implicated tags, ie where having fox adds the canid tag. This may introduce duplicates
-	implicated_tags = aliased_tags
-	for tag in aliased_tags:
-		itag = tag
-		
-		# Append any and all tags
-		query = f'SELECT * FROM implicate WHERE tag=?'
-		for row in cur.execute(query, (itag,)):
-			implicated_tags.append(row[1])
-
-	# Drop tags that are in the following categories, 
-	# copyright 3, invalid -1 / 6, lore 8,
-	# we keep general 0, artist 1, character 4, species 5 and meta 7
-	dropped_tags = []
-	for tag in implicated_tags:
-		dtag = tag
-		drop_tag = False
-		query = f'SELECT * FROM tags WHERE tag =?'
-		for row in cur.execute(query, (dtag,)):
-			if int(row[1]) in [-1, 3, 6, 8]:
-				drop_tag = True
-			# Also drop tags if they fail the whitelist/blacklist for meta and species
-			if tag not in meta_whitelist and row[1] == 7:
-				drop_tag = True
-			if tag in species_blacklist and row[1] == 5:
-				drop_tag = True
-
-		if not drop_tag:
-			dropped_tags.append(dtag)
-	
-	# Deduplicate
-	dedup_tags = list(dict.fromkeys(dropped_tags))
-
-	final_tags = []
-	# Clean up tags and add known tags to the autocomplete CSV:
-	for tag in dedup_tags:
-		ctag = tag.replace("_", " ")
-		if tag in all_tags:
-			all_tags[tag][0] += 1
-		elif tag not in all_tags:
-			query = f'SELECT * FROM tags WHERE tag =?'
-			for row in cur.execute(query, (tag,)):
-				# Store the count, category and post processed name
-				all_tags[tag] = [1, row[1], ctag]
-
-		final_tags.append(ctag)
-	
-	# Randomly shuffle tags
-	#random.shuffle(final_tags)
-	final_tags.sort(key=str.lower)
-
-	# Finally, return a processed string
-	tag_string = ""
-	pos = 1
-	for tag in final_tags:
-		if pos == len(final_tags):
-			tag_string += tag
-		else:
-			tag_string += f"{tag}, "
-		pos += 1
-	return tag_string
-
 def get_tag_alias(cur, _tag):
 	# Scan for an existing alias
 	query = f'SELECT COUNT(1) FROM alias WHERE old=?'
@@ -423,7 +335,7 @@ if args.tags:
 	with open(pwd + "/db/model_tags.csv", "w", encoding="utf-8") as csv_file:
 		csv_file.write(csv_data_undesired)
 
-if args.verify_integrity:
+if args.verify_integrity and not args.tags:
 	print("Verifying Tag Integrity:")
 	# Check each file properly
 	for filename in tqdm(os.listdir(args.out)):
