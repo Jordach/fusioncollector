@@ -148,6 +148,13 @@ def process_tags_v2(con, cur, tags):
 	final_tags = []
 	for tag in processed_tags:
 		drop_tag = filter_tags(cur, tag)
+		# Do not drop rating tags
+		if tag == "safe":
+			drop_tag = False
+		elif tag == "questionable":
+			drop_tag = False
+		elif tag == "explicit":
+			drop_tag = False
 		# Do not process any further
 		if not drop_tag:
 			final_tags.append(tag)
@@ -166,17 +173,25 @@ def process_tags_v2(con, cur, tags):
 		if tag in all_tags:
 			all_tags[tag][0] += 1
 		elif tag not in all_tags:
-			if tag not in ["safe", "questionable", "explicit"]:
+			if tag == "safe":
+				all_tags[tag] = [1, 0, ctag]
+			elif tag == "questionable":
+				all_tags[tag] = [1, 0, ctag]
+			elif tag == "explicit":
+				all_tags[tag] = [1, 0, ctag]
+			else:
+				# If the tag exists in the DB, add it to the CSV
 				query = f'SELECT COUNT(1) FROM tags WHERE tag=?'
 				for row in cur.execute(query, (tag,)):
 					if not row[0]:
 						add_to_string = False
-
-			query = f'SELECT * FROM tags WHERE tag=?'
-			for row in cur.execute(query, (tag,)):
-				# Store the count, category and post processed name
-				all_tags[tag] = [1, row[1], ctag]
-				break
+				
+				if add_to_string:
+					query = f'SELECT * FROM tags WHERE tag=?'
+					for row in cur.execute(query, (tag,)):
+						# Store the count, category and post processed name
+						all_tags[tag] = [1, row[1], ctag]
+						break
 		
 		if add_to_string:
 			if pos == len(final_tags):
