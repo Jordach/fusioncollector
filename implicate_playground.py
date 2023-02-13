@@ -7,21 +7,14 @@ from tqdm import tqdm
 csv.field_size_limit(1000000)
 pwd = os.getcwd()
 
-if os.path.isfile(pwd + "/db/e6.db"):
-	raise Exception("Delete, rename or move the existing e6.db to somewhere else. Stopping.")
-
 con = sqlite3.connect(":memory:")
 cur = con.cursor()
 
-try:
-	cur.execute("CREATE TABLE tags (tag text PRIMARY KEY UNIQUE, category integer, count integer)")
-	cur.execute("CREATE TABLE alias (old text, new text)")
-	cur.execute("CREATE TABLE implicate (tag text, new text)")
-	cur.execute("CREATE TABLE implicate_lut (tag text PRIMARY KEY UNIQUE, new text)")
-	cur.execute("CREATE TABLE posts (post integer PRIMARY KEY UNIQUE, hash text, rating text, tags text, ext text, score integer, deleted text)")
-	con.commit()
-except:
-	pass
+cur.execute("CREATE TABLE tags (tag text PRIMARY KEY UNIQUE, category integer, count integer)")
+cur.execute("CREATE TABLE alias (old text, new text)")
+cur.execute("CREATE TABLE implicate (tag text, new text)")
+cur.execute("CREATE TABLE implicate_lut (tag text PRIMARY KEY UNIQUE, new text)")
+con.commit()
 
 # Process the tags.csv
 with open(pwd + "/db/tags.csv", "r", encoding="utf-8") as tagscsv:
@@ -42,7 +35,7 @@ with open(pwd + "/db/tag_aliases.csv", "r", encoding="utf-8") as aliascsv:
 		old = str(i["antecedent_name"])
 		new = str(i["consequent_name"])
 		state = str(i["status"])
-		if state in ["active", "approved"]:
+		if state in ["active", "pending"]:
 			cur.execute(f"INSERT INTO alias (old, new) VALUES (?, ?)", (old, new,))
 
 con.commit()
@@ -58,6 +51,14 @@ with open(pwd + "/db/tag_implications.csv", "r", encoding="utf-8") as implicsv:
 			cur.execute(f"INSERT INTO implicate (tag, new) VALUES (?, ?)", (old, add,))
 
 con.commit()
+
+# Things
+cur.execute("SELECT * FROM tags")
+tags = cur.fetchall()
+lres = len(tags)
+init_time = time.perf_counter()
+avg_times = []
+console_len = ""
 
 def progress_bar(current, total, bar_length=20):
 	fraction = current / total
@@ -80,31 +81,32 @@ def get_list_avg(list):
 
 def get_tag_alias(cur, _tag):
 	# Scan for an existing alias
-	query = f"SELECT COUNT(1) FROM alias WHERE old LIKE ? ESCAPE '\\'"
-	for row in cur.execute(query, (_tag,)):
+	query = f"SELECT COUNT(1) FROM alias WHERE old LIKE '{_tag}' ESCAPE '\\'"
+	for row in cur.execute(query):
 		if not row[0]:
 			return _tag
 
 	# If there is an alias, use that
-	query = f"SELECT * FROM alias WHERE old LIKE ? ESCAPE '\\'"
-	for row in cur.execute(query, (_tag,)):
+	query = f"SELECT * FROM alias WHERE old LIKE '{_tag}' ESCAPE '\\'"
+	for row in cur.execute(query):
 		return row[1]
 
 def recursive_implicate_walk(_cur, _tag, tag_dict):
 	esc_tag = _tag.replace("_", "\\_")
-	query = f"SELECT COUNT(1) FROM implicate WHERE tag LIKE ? ESCAPE '\\'"
-	for row in _cur.execute(query, (esc_tag,)):
+	query = f"SELECT COUNT(1) FROM implicate WHERE tag LIKE '{esc_tag}' ESCAPE '\\'"
+	for row in _cur.execute(query):
 		if not row[0]:
 			return tag_dict
 
 	# Let's look for a tag:
-	query = f"SELECT * FROM implicate WHERE tag LIKE ? ESCAPE '\\'"
-	_cur.execute(query, (esc_tag,))
+	query = f"SELECT * FROM implicate WHERE tag LIKE '{esc_tag}' ESCAPE '\\'"
+	_cur.execute(query)
 	tags = _cur.fetchall()
 	for row in tags:
 		al_row = row[1]
 		if al_row in tag_dict:
 			continue
+		print(f"{_tag} -> {row[1]}")
 		# Since we found a tag, let's check if that contains a implicate
 		tag_dict[al_row] = True
 		new_dict = recursive_implicate_walk(_cur, al_row, tag_dict)
@@ -114,9 +116,10 @@ def recursive_implicate_walk(_cur, _tag, tag_dict):
 	return tag_dict
 
 def create_implicate_list(_tag):
-	tag = get_tag_alias(cur, _tag.replace("_", "\\_"))
+	tag = get_tag_alias(cur, _tag)
 
 	tdict = recursive_implicate_walk(cur, tag, {})
+	print("")
 	implicates = list(dict.fromkeys(tdict))
 	implicates.sort(key=str.lower)
 
@@ -132,55 +135,36 @@ def create_implicate_list(_tag):
 	if tag_out != "":
 		cur.execute(query, (tag, tag_out))
 
-# Things
-cur.execute("SELECT * FROM tags")
-alltags = cur.fetchall()
-lres = len(alltags)
-init_time = time.perf_counter()
-avg_times = []
-console_len = ""
-numimg = 0
+
 # And also construct a simple lookup table:
-for row in alltags:
-	loop_start = time.perf_counter()
-	create_implicate_list(row[0])
-	loop_end = time.perf_counter()
-	old_len = len(console_len)
-	tot_time = loop_end - init_time
-	loop_time = loop_end - loop_start
-	avg_times.append(loop_time)
-	true_avg = get_list_avg(avg_times)
-	bar, end = progress_bar(numimg, lres, bar_length=30)
-	console_len = f" {bar} D:{numimg}/{lres} [{get_time(tot_time)}<{get_time((true_avg)*(lres-numimg))}, {loop_time:.2f}s/implicate_lut]"
-	new_len = len(console_len)
-	if old_len > new_len:
-		console_len = console_len + (old_len - new_len) * " "
-		
-	if numimg != lres:
-		end = "\r"
-	else:
-		end = "\n"
-	print(console_len, end=end)
-	numimg += 1
+test_all = False
+if test_all:
+	numimg = 0
+	for row in tags:
+		loop_start = time.perf_counter()
+		create_implicate_list(row[0])
+		loop_end = time.perf_counter()
+		old_len = len(console_len)
+		tot_time = loop_end - init_time
+		loop_time = loop_end - loop_start
+		avg_times.append(loop_time)
+		true_avg = get_list_avg(avg_times)
+		bar, end = progress_bar(numimg, lres, bar_length=30)
+		console_len = f" {bar} D:{numimg}/{lres} [{get_time(tot_time)}<{get_time((true_avg)*(lres-numimg))}, {loop_time:.2f}s/implicate_lut]"
+		new_len = len(console_len)
+		if old_len > new_len:
+			console_len = console_len + (old_len - new_len) * " "
+			
+		if numimg != lres:
+			end = "\r"
+		else:
+			end = "\n"
+		#print(console_len, end=end)
+		numimg += 1
 
-print("\n")
-con.commit()
+	print("\n")
+	con.commit()
 
-# Process the posts.csv
-with open(pwd + "/db/posts.csv", "r", encoding="utf-8") as postscsv:
-	dr = csv.DictReader(postscsv)
-	for i in tqdm(dr, desc="posts"):
-		id = int(i["id"])
-		md5 = str(i["md5"])
-		rating = str(i["rating"])
-		tags = str(i["tag_string"])
-		ext = str(i["file_ext"])
-		status = str(i["is_deleted"])
-		score = int(i["score"])
-
-		cur.execute(f"INSERT OR IGNORE INTO posts (post, hash, rating, tags, ext, score, deleted) VALUES (?, ?, ?, ?, ?, ?, ?)", (id, md5, rating, tags, ext, score, status))
-
-con.commit()
-
-file_con = sqlite3.connect(pwd + "/db/e6.db")
-con.backup(file_con)
+create_implicate_list("rainbow_fingerless_elbow_gloves")
+create_implicate_list("penis_in_pussy")
+create_implicate_list("penile_penetration")
