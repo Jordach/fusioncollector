@@ -21,6 +21,7 @@ parser.add_argument("--images", default=False, action="store_true", help="Will d
 parser.add_argument("--overwrite_images", default=False, action="store_true", help="Overwrites images if they already exist.")
 parser.add_argument("--tags", default=False, action="store_true", help="Will only process tags.")
 parser.add_argument("--overwrite_tags", default=False, action="store_true", help="Overwrites tags if they already exist.")
+parser.add_argument("--test_tags", default=False, action="store_true", help="Tests a post ID.")
 parser.add_argument("--verify_integrity", default=False, action="store_true", help="Scans the directory and checks if file tags match the post in the e6 DB.")
 args = parser.parse_args()
 
@@ -54,16 +55,16 @@ if not os.path.isfile(pwd + "/tag_species_blacklist.conf"):
 	with open(pwd + "/tag_species_blacklist.conf") as file:
 		file.write("")
 
-species_blacklist = []
+species_blacklist = {}
 with open(pwd + "/tag_species_blacklist.conf", "r", encoding="utf-8") as species_file:
 	tags = species_file.readlines()
 	for tag in tags:
 		new_tag = tag.strip().lower()
 		if new_tag not in species_blacklist:
-			species_blacklist.append(new_tag)
+			species_blacklist[new_tag] = True
 
 # Get undesired tags from the bot's list.
-undesired_tags = []
+undesired_tags = {}
 if os.path.isfile(os.getcwd() + "/undesired_tags.conf"):
 	with open("undesired_tags.conf", "r") as ut:
 		lines = ut.readlines()
@@ -74,7 +75,7 @@ if os.path.isfile(os.getcwd() + "/undesired_tags.conf"):
 				if undesired_tag.startswith("#"):
 					continue
 				else:
-					undesired_tags.append(undesired_tag)
+					undesired_tags[undesired_tag] = True
 
 # Database stuff
 def load_db():
@@ -122,12 +123,15 @@ def get_tag_alias(cur, _tag):
 def filter_tags(cur, _tag):
 	query = f'SELECT * FROM tags WHERE tag=? LIMIT 1'
 	for row in cur.execute(query, (_tag,)):
+		# Drop tags from these categories
 		if int(row[1]) in [-1, 3, 6, 8]:
 			return True
 		# Also drop tags if they fail the whitelist/blacklist for meta and species
-		if tag in meta_whitelist and row[1] == 7:
+		# Drop meta tags that are not in the whitelist
+		elif _tag not in meta_whitelist and int(row[1]) == 7:
 			return True
-		if tag not in species_blacklist and row[1] == 5:
+		# Drop species tags that are in the blacklist
+		elif _tag in species_blacklist and int(row[1]) == 5:
 			return True
 		
 	return False
@@ -161,9 +165,11 @@ def process_tags_v2(con, cur, tags):
 
 	# Deduplicate
 	final_tags = list(dict.fromkeys(final_tags))
-	random.shuffle(final_tags)
-	#final_tags.sort(key=str.lower)
-
+	if args.test_tags:
+		final_tags.sort(key=str.lower)
+	else:
+		random.shuffle(final_tags)
+	
 	pos = 1
 	for tag in final_tags:
 		ctag = tag.replace("_", " ")
@@ -201,6 +207,14 @@ def process_tags_v2(con, cur, tags):
 		pos += 1
 	return tag_string
 		
+def mkdir(hash1, hash2):
+	b1 = f"{args.out}/{hash1}"
+	b2 = f"{args.out}/{hash1}/{hash2}"
+	if not os.path.isdir(b1):
+		os.mkdir(b1)
+	if not os.path.isdir(b2):
+		os.mkdir(b2)
+
 def download_e6_post(_con, _cur, _id):
 	base_url = "https://static1.e621.net/data/"
 	end_url = "?download=1"
@@ -209,10 +223,14 @@ def download_e6_post(_con, _cur, _id):
 	# Download image data
 	if post[6] == "f":
 		img_filename = f"{_id}.{post[4]}"
-		if not os.path.isfile(args.out + "/" + img_filename) or args.overwrite_images:
-			url = f"{base_url}{post[1][0:2]}/{post[1][2:4]}/{post[1]}.{post[4]}{end_url}"
+		hash_f1 = post[1][0:2]
+		hash_f2 = post[1][2:4]
+		mkdir(hash_f1, hash_f2)
+		out = f"{args.out}/{hash_f1}/{hash_f2}/{img_filename}"
+		if not os.path.isfile(out) or args.overwrite_images:
+			url = f"{base_url}{hash_f1}/{hash_f2}/{post[1]}.{post[4]}{end_url}"
 			try:
-				request.urlretrieve(url, args.out + "/" + img_filename)
+				request.urlretrieve(url, out)
 			except:
 				bad_post_ids.append(_id)
 
@@ -238,8 +256,12 @@ def get_e6_tags(_con, _cur, _id):
 	elif post[2] == "s":
 		tags += f" safe"
 	clean_tags = process_tags_v2(_con, _cur, tags)
-	if not os.path.isfile(args.out + "/" + tag_filename) or args.overwrite_tags:
-		with open(f"{args.out}/{tag_filename}", "w", encoding="utf-8") as file:
+	hash_f1 = post[1][0:2]
+	hash_f2 = post[1][2:4]
+	mkdir(hash_f1, hash_f2)
+	out = f"{args.out}/{hash_f1}/{hash_f2}/{tag_filename}"
+	if not os.path.isfile(out) or args.overwrite_tags:
+		with open(out, "w", encoding="utf-8") as file:
 			file.write(clean_tags)
 
 cur.execute("SELECT * FROM posts")
@@ -309,8 +331,8 @@ if args.tags:
 	print("Tags Processing:")
 	for row in cur.execute(dl_query):
 		loop_start = time.perf_counter()
-		if row[0] not in bad_post_ids:
-			get_e6_tags(econ, ecur, row[0])
+		#if row[0] not in bad_post_ids:
+		get_e6_tags(econ, ecur, row[0])
 		loop_end = time.perf_counter()
 		old_len = len(console_len)
 		tot_time = loop_end - init_time
@@ -406,3 +428,6 @@ if args.verify_integrity and not args.tags:
 
 	with open(pwd + "/db/model_tags.csv", "w", encoding="utf-8") as csv_file:
 		csv_file.write(csv_data_undesired)
+
+if args.test_tags:
+	print(list_e6_tags(econ, ecur, 2278196))
